@@ -10,7 +10,7 @@ services:
     env_file:
       - ./console/.env
     ports:
-      - '3000:80'
+      - '127.0.0.1:3000:80'
     restart: 'always'
     logging:
       driver: json-file
@@ -38,9 +38,11 @@ services:
     env_file:
       - ./core-api/.env
     ports:
-      - '6276:6276'
-      - '16276:16276'
+      - '127.0.0.1:6276:6276'
+      - '127.0.0.1:16276:16276'
     environment:
+      - TRUSTED_PROXIES=172.19.0.1
+      - BETTER_AUTH_URL=https://asm.vtccloud.vn
       - POSTGRES_HOST=postgres
       - REDIS_URL=redis://:password@redis:6379/0
       - GEO_IP_URL=geo-ip:4360
