@@ -432,13 +432,14 @@ export class JobsRegistryService {
     // a host with none is skipped. See SERVICES_PLACEHOLDER.
     const bindsPorts = usesServicesPlaceholder(jobConfig);
     // Stored with its secrets encrypted; decrypted again at dispatch.
-    const storedConfig = isConnector && !bindsPorts
-      ? await this.toolConfigProfilesService.sealJobConfig(
-          workspaceId,
-          tool.name,
-          mergedConfig ?? config,
-        )
-      : null;
+    const storedConfig =
+      isConnector && !bindsPorts
+        ? await this.toolConfigProfilesService.sealJobConfig(
+            workspaceId,
+            tool.name,
+            mergedConfig ?? config,
+          )
+        : null;
 
     const loaded = await this.stepScope.load(inputs, {
       targetIds,
@@ -481,12 +482,12 @@ export class JobsRegistryService {
           inputs: isConnector ? planned.connectorInputs : null,
           configProfileId: isConnector ? configProfileId : undefined,
           config: bindsPorts
-    ? await this.toolConfigProfilesService.sealJobConfig(
-        workspaceId,
-        tool.name,
-        plannedConfig,
-      )
-    : storedConfig,
+            ? await this.toolConfigProfilesService.sealJobConfig(
+                workspaceId,
+                tool.name,
+                plannedConfig,
+              )
+            : storedConfig,
           isSaveRawResult: isSaveRawResult ?? false,
           isPublishEvent,
         } as DeepPartial<Job>),

@@ -231,7 +231,7 @@ describe('JobsRegistryController', () => {
       expect(result.configInband).toBe(true);
     });
 
-    it('sends the inputs a job was planned with, e.g. the URL of a web service', async () => {
+    it.each(['nikto', 'nuclei'])('sends %s the inputs a job was planned with', async (toolName) => {
       mockJobsRegistryService.getNextJob.mockResolvedValue({
         id: 'job-3',
         workspaceId: 'ws-1',
@@ -239,7 +239,8 @@ describe('JobsRegistryController', () => {
         asset: { value: 'app.example.com' },
         config: null,
         inputs: { target: 'https://app.example.com:8443' },
-        tool: { id: 'nikto', name: 'nikto' },
+        tool: { id: toolName, name: toolName },
+        assetService: { port: 8443 },
       });
       mockConnectorRegistry.getConnector.mockReturnValue({
         name: 'Nikto',
@@ -253,6 +254,30 @@ describe('JobsRegistryController', () => {
       expect(result.inputs).toEqual({
         fields: { target: { stringValue: 'https://app.example.com:8443' } },
       });
+    });
+
+    it.each([
+      ['app.example.com', 80, 'app.example.com:80'],
+      ['app.example.com', 443, 'app.example.com:443'],
+      ['app.example.com', 8080, 'app.example.com:8080'],
+      ['192.0.2.1', 22, '192.0.2.1:22'],
+      ['2001:db8::1', 8443, '[2001:db8::1]:8443'],
+      ['[2001:db8::1]', 8443, '[2001:db8::1]:8443'],
+      ['app.example.com', undefined, 'app.example.com'],
+    ])('sends nuclei the discovered port for %s', async (host, port, target) => {
+      mockJobsRegistryService.getNextJob.mockResolvedValue({
+        id: 'j1', workspaceId: 'ws-1', category: 'vulnerabilities',
+        asset: { value: host }, assetService: { port },
+        tool: { id: 'nuclei', name: 'nuclei' },
+      });
+      mockConnectorRegistry.getConnector.mockReturnValue({
+        name: 'Nuclei', slug: 'nuclei', image: 'nuclei:test',
+      });
+      mockToolConfigProfilesService.resolveConfigForJob.mockResolvedValue({});
+
+      const result = await controller.next({ id: 'worker-1' }, metadata);
+
+      expect(result.inputs).toEqual({ fields: { target: { stringValue: target } } });
     });
 
     it('sends repository inputs with the integration token for a Git organization asset', async () => {

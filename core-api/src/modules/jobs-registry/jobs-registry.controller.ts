@@ -588,9 +588,16 @@ export class JobsRegistryController {
       target?: { type?: string; integrationId?: string | null } | null;
     };
     if (!isRepositoryAsset(asset)) {
-      // Jobs planned per service or URL carry their own inputs; older jobs
-      // (and host jobs) fall back to the asset.
-      return job.inputs ?? buildConnectorInputs(asset);
+      if (job.inputs) return job.inputs;
+      if (job.tool?.name === 'nuclei' && job.assetService?.port) {
+        // Leave the scheme unset so the connector probes HTTP/HTTPS while
+        // preserving host:port for network templates. Bracket IPv6 literals.
+        const host = asset.value.includes(':') && !asset.value.startsWith('[')
+          ? `[${asset.value}]`
+          : asset.value;
+        return { target: `${host}:${job.assetService.port}` };
+      }
+      return buildConnectorInputs(asset);
     }
 
     const integrationId = asset.target?.integrationId;
