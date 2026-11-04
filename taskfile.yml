@@ -12,6 +12,26 @@ includes:
     dir: ./worker
 
 tasks:
+  ops:docker:
+    desc: Run Docker diagnostics or targeted service operations
+    cmds:
+      - docker {{.CLI_ARGS}}
+
+  ops:nginx:
+    desc: Validate or reload the host reverse proxy
+    cmds:
+      - nginx {{.CLI_ARGS}}
+
+  ops:storage-check:
+    desc: Verify a stored screenshot through the console and host reverse proxy
+    requires:
+      vars: [STORAGE_PATH]
+    env:
+      STORAGE_CHECK_PATH: '{{.STORAGE_PATH}}'
+    cmds:
+      - |
+        docker exec -i -e STORAGE_CHECK_PATH oasm-api node - < scripts/check-storage-route.cjs | node scripts/check-storage-route.cjs --check
+
   # Development environment setup and start
   # Starts both API and console development servers with hot-reload enabled
   # Environment: development mode
