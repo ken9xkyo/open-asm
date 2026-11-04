@@ -101,14 +101,15 @@ describe('SchemaForm preset hints', () => {
     expect((inputs[1] as HTMLInputElement).value).toBe('rce');
   });
 
-  it('applyAllPresets fills empty fields but never sensitive ones', () => {
+  it('applyAllPresets fills defaults only — never examples or sensitive fields', () => {
     const schema = {
       type: 'object',
       properties: {
         domain: {
           type: 'string',
           title: 'Scan domain',
-          examples: ['example.com'],
+          default: 'example.com',
+          examples: ['other.example'],
         },
         apiKey: {
           type: 'string',
@@ -137,8 +138,8 @@ describe('SchemaForm preset hints', () => {
     );
     expect(named.domain).toBe('example.com');
     expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('');
-    expect(named['tags[0]']).toBe('cve');
-    expect(named['tags[1]']).toBe('rce');
+    expect(named['tags[0]']).toBe('');
+    expect(named['tags[1]']).toBeUndefined();
   });
 
   it('keeps hints visible in JSON-tab mode (ToolConfigForm config)', () => {

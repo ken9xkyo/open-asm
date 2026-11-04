@@ -138,7 +138,7 @@ describe('ToolConnectorConfigSheet preset hints (end-to-end)', () => {
     expect(img?.getAttribute('src')).toBe('/api/connectors/nuclei.png');
   });
 
-  it('Apply all presets fills empty fields, leaves defaults and secrets untouched', async () => {
+  it('Apply all presets fills only schema defaults, never examples', async () => {
     const user = userEvent.setup();
     const queryClient = new QueryClient();
     render(
@@ -160,10 +160,12 @@ describe('ToolConnectorConfigSheet preset hints (end-to-end)', () => {
         (i as HTMLInputElement).value,
       ]),
     );
-    expect(named['tags[0]']).toBe('cve');
-    expect(named['tags[1]']).toBe('rce');
-    expect(named['templateIds[0]']).toBe('CVE-2024-12345');
-    expect(named['templateIds[1]']).toBe('wordpress-rce');
+    // Example-only fields stay empty: applying them would filter the scan
+    // down to placeholder template IDs that do not exist.
+    expect(named['tags[0]']).toBe('');
+    expect(named['tags[1]']).toBeUndefined();
+    expect(named['templateIds[0]']).toBe('');
+    expect(named['templateIds[1]']).toBeUndefined();
   });
 });
 describe('ToolConnectorConfigSheet dismiss', () => {
