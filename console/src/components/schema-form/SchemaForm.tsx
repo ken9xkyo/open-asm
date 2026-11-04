@@ -506,7 +506,9 @@ export function SchemaForm({
       const next = { ...source };
       for (const [key, prop] of formEntries) {
         if (isSensitive(prop)) continue;
-        const preset = firstPreset(prop);
+        // Only real defaults: examples are illustrative (e.g. nuclei
+        // templateIds) and become filters that match nothing.
+        const preset = prop.default;
         if (preset !== undefined && isEmptyValue(next[key])) next[key] = preset;
       }
       return next;
