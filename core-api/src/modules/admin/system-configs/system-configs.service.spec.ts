@@ -3,6 +3,7 @@ import { RedisService } from '@/services/redis/redis.service';
 import { BadRequestException } from '@nestjs/common';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import axios from 'axios';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
 import { StorageService } from '@/modules/storage/storage.service';
@@ -56,6 +57,21 @@ describe('SystemConfigsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('startup version check', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('starts without waiting for the release server and bounds the request', async () => {
+      const request = jest
+        .spyOn(axios, 'get')
+        .mockReturnValue(new Promise(() => undefined));
+
+      await expect(Promise.resolve(service.onModuleInit())).resolves.toBeUndefined();
+      await Promise.resolve();
+
+      expect(request).toHaveBeenCalledWith(expect.any(String), { timeout: 5000 });
+    });
   });
 
   describe('getConfig', () => {

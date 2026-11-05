@@ -66,8 +66,9 @@ export class SystemConfigsService implements OnModuleInit {
     private redisService: RedisService,
   ) {}
 
-  async onModuleInit() {
-    await this.checkUpdate();
+  /** Check releases in the background so an unavailable upstream cannot delay startup. */
+  onModuleInit(): void {
+    void this.checkUpdate();
   }
 
   /**
@@ -317,7 +318,9 @@ export class SystemConfigsService implements OnModuleInit {
   private async getLatestVersion(): Promise<ReleaseVersion | null> {
     const apiUrlGithubReleaseLatestVersion = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
     try {
-      const response = await axios.get(apiUrlGithubReleaseLatestVersion);
+      const response = await axios.get(apiUrlGithubReleaseLatestVersion, {
+        timeout: 5000,
+      });
       return response.data as ReleaseVersion;
     } catch (error) {
       this.logger.error('Error fetching latest version:', error);
