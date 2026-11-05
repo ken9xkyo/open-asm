@@ -24,7 +24,6 @@ import {
   useProjectsControllerGetWorkflowTemplates,
   useProjectsControllerGetWorkflows,
   useProjectsControllerUpdateWorkflow,
-  useToolsControllerGetInstalledTools,
   type ProjectWorkflow,
 } from '@/services/apis/gen/queries';
 import { LoaderCircle } from 'lucide-react';
@@ -45,6 +44,7 @@ import {
   ToolPipelineBuilder,
   type PipelineToolEntry,
 } from './tool-pipeline-builder';
+import { usePipelineTools } from './use-pipeline-tools';
 import {
   draftFromTriggers,
   isTriggersDraftValid,
@@ -70,8 +70,8 @@ export function WorkflowEditorSheet({
 }) {
   const invalidate = useInvalidateProjects();
   const editing = !!binding;
-  const toolsQuery = useToolsControllerGetInstalledTools();
-  const tools = useMemo(() => toolsQuery.data?.data ?? [], [toolsQuery.data?.data]);
+  const toolsQuery = usePipelineTools({ enabled: open });
+  const { tools, installableTools } = toolsQuery;
   const templatesQuery = useProjectsControllerGetWorkflowTemplates({
     query: { enabled: open && !editing },
   });
@@ -92,14 +92,25 @@ export function WorkflowEditorSheet({
   const copyWorkflows = useProjectsControllerGetWorkflows(copyProject ?? '', {
     query: { enabled: !!copyProject },
   });
+  // The ones this workflow can run after: every other workflow of the project.
+  const projectWorkflows = useProjectsControllerGetWorkflows(projectId, {
+    query: { enabled: open },
+  });
+  const otherWorkflows = useMemo(
+    () =>
+      (projectWorkflows.data ?? [])
+        .filter((other) => other.id !== binding?.id && other.workflow?.name)
+        .map((other) => other.workflow.name),
+    [projectWorkflows.data, binding?.id],
+  );
 
-  // Reset on open (and once the tools arrive) only: keyed by ids, so a
-  // background refetch does not wipe a pipeline being edited.
+  // Reset on open (and once the tools arrive) only, so a refetch — or a tool
+  // installed from the picker — does not wipe a pipeline being edited.
   const latest = useRef({ binding, tools });
   latest.current = { binding, tools };
-  const toolKey = tools.map((tool) => tool.id).join(',');
+  const toolsLoaded = !toolsQuery.isLoading;
   useEffect(() => {
-    if (!open) return;
+    if (!open || !toolsLoaded) return;
     const { binding, tools } = latest.current;
     setName(binding ? workflowLabel(binding.workflow) : '');
     setSource(binding ? 'tools' : 'template');
@@ -108,7 +119,7 @@ export function WorkflowEditorSheet({
     setCopyBinding(undefined);
     setEntries(binding ? entriesFromContent(binding.workflow.content, tools) : []);
     setTriggers(draftFromTriggers(binding?.triggers));
-  }, [open, binding?.id, toolKey]);
+  }, [open, binding?.id, toolsLoaded]);
 
   const create = useProjectsControllerCreateWorkflow();
   const update = useProjectsControllerUpdateWorkflow();
@@ -168,10 +179,15 @@ export function WorkflowEditorSheet({
       <LoaderCircle className="size-4 animate-spin" />
       Loading installed tools...
     </p>
-  ) : tools.length === 0 ? (
+  ) : tools.length === 0 && installableTools.length === 0 ? (
     <NoInstalledToolsState />
   ) : (
-    <ToolPipelineBuilder tools={tools} value={entries} onChange={setEntries} />
+    <ToolPipelineBuilder
+      tools={tools}
+      installableTools={installableTools}
+      value={entries}
+      onChange={setEntries}
+    />
   );
 
   return (
@@ -276,7 +292,11 @@ export function WorkflowEditorSheet({
             </Tabs>
           )}
           <div className="border-t pt-5">
-            <WorkflowTriggersForm value={triggers} onChange={setTriggers} />
+            <WorkflowTriggersForm
+              value={triggers}
+              onChange={setTriggers}
+              otherWorkflows={otherWorkflows}
+            />
           </div>
         </div>
         <SheetFooter className="flex-row justify-end gap-2">
