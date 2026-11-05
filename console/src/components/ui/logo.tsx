@@ -12,6 +12,6 @@ interface LogoProps {
 export default function Logo({ width, height, logoPath }: LogoProps) {
   const src = resolveClientUrl(logoPath) ?? '/logo.png';
   return (
-    <img src={src} alt="logo" width={width} height={height} className="rounded-md" />
+    <img src={src} alt="logo" width={width} height={height} className="object-contain" />
   );
 }
