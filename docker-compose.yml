@@ -143,7 +143,7 @@ services:
 
   postgres:
     container_name: oasm-postgres
-    image: pgvector/pgvector:pg18
+    image: pgvector/pgvector:pg17
     restart: always
     env_file:
       - ./core-api/.env
@@ -160,8 +160,8 @@ services:
         max-size: 10m
         max-file: '3'
     volumes:
-      # pg18 images keep PGDATA in /var/lib/postgresql/18/docker; mount the parent.
-      - pgdata:/var/lib/postgresql:rw
+      # Keep the existing PostgreSQL 17 cluster at its original data path.
+      - pgdata:/var/lib/postgresql/data:rw
     # Loopback only: agent sandboxes on a shared worker must not reach the
     # database (trust auth) through the Docker bridge gateway.
     ports:
