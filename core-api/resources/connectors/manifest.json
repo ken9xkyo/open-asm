@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T04:37:52.2457627Z",
+  "generatedAt": "2026-11-09T01:51:11.0986782Z",
   "connectors": [
     {
       "name": "Acunetix",
@@ -489,8 +489,8 @@
     {
       "name": "Katana - Web Crawler",
       "slug": "katana",
-      "version": "1.7.0",
-      "image": "ghcr.io/oasm-platform/connector-katana:1.7.0",
+      "version": "1.8.0",
+      "image": "ghcr.io/oasm-platform/connector-katana:1.8.0",
       "author": "oasm",
       "pricingTier": [
         "free"
@@ -1474,8 +1474,8 @@
     {
       "name": "Trivy - Dependency & IaC Scanner",
       "slug": "trivy",
-      "version": "0.75.0",
-      "image": "ghcr.io/oasm-platform/connector-trivy:0.75.0",
+      "version": "0.76.2",
+      "image": "ghcr.io/oasm-platform/connector-trivy:0.76.2",
       "author": "oasm",
       "pricingTier": [
         "free"
@@ -1605,8 +1605,8 @@
     {
       "name": "WPScan - WordPress Security Scanner",
       "slug": "wpscan",
-      "version": "4.1.0",
-      "image": "ghcr.io/oasm-platform/connector-wpscan:4.1.0",
+      "version": "4.2.0",
+      "image": "ghcr.io/oasm-platform/connector-wpscan:4.2.0",
       "author": "oasm",
       "pricingTier": [
         "free"
