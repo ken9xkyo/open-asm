@@ -64,6 +64,7 @@ export class ReportsController {
       startDate: query.startDate,
       endDate: query.endDate,
       targetIds: query.targetIds,
+      projectIds: query.projectIds,
     });
     res.set({
       'Content-Type': 'application/pdf',
@@ -83,6 +84,7 @@ export class ReportsController {
       startDate: query.startDate,
       endDate: query.endDate,
       targetIds: query.targetIds,
+      projectIds: query.projectIds,
       vulnIds: query.vulnIds,
       minSeverity: query.minSeverity,
     });
@@ -115,6 +117,7 @@ export class ReportsController {
       startDate: body.startDate ? new Date(body.startDate) : undefined,
       endDate: body.endDate ? new Date(body.endDate) : undefined,
       targetIds: body.targetIds,
+      projectIds: body.projectIds,
     };
 
     await this.reportsService.generateReport(
@@ -148,6 +151,7 @@ export class ReportsController {
       startDate: body.startDate ? new Date(body.startDate) : undefined,
       endDate: body.endDate ? new Date(body.endDate) : undefined,
       targetIds: body.targetIds,
+      projectIds: body.projectIds,
       vulnIds: body.vulnIds,
       minSeverity: body.minSeverity,
     };

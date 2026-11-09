@@ -780,6 +780,7 @@ export const SummaryReportDocument: React.FC<SummaryReportDocumentProps> = ({
         systemNameChar={data.systemNameChar}
         systemName={data.systemName}
         workspaceName={data.workspaceName}
+        projectNames={data.projectNames}
         classification={data.classification}
         formattedDate={data.formattedDate}
       />

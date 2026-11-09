@@ -1,6 +1,35 @@
 import { GetManyBaseQueryParams } from '@/common/dtos/get-many-base.dto';
+import { applyDecorators } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString, IsEnum } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
+
+/** A query string carries a single value as a plain string. */
+const toArray = ({ value }: { value: unknown }): unknown[] | undefined =>
+  value === undefined ? undefined : Array.isArray(value) ? value : [value];
+
+/** Optional project scope shared by every generate/preview request. */
+const ProjectIdsProperty = () =>
+  applyDecorators(
+    ApiProperty({
+      required: false,
+      type: [String],
+      description:
+        'Limit the report to the assets of these projects (active projects of the workspace)',
+    }),
+    IsOptional(),
+    Transform(toArray),
+    IsArray(),
+    ArrayMaxSize(50),
+    IsUUID(undefined, { each: true }),
+  );
 
 const ReportType = {
   SUMMARY: 'SUMMARY',
@@ -66,6 +95,9 @@ export class GenerateSummaryReportBodyDto {
   @IsArray()
   @IsString({ each: true })
   targetIds?: string[];
+
+  @ProjectIdsProperty()
+  projectIds?: string[];
 }
 
 export class GenerateVulReportBodyDto {
@@ -94,6 +126,9 @@ export class GenerateVulReportBodyDto {
   @IsArray()
   @IsString({ each: true })
   targetIds?: string[];
+
+  @ProjectIdsProperty()
+  projectIds?: string[];
 
   @ApiProperty({
     required: false,
@@ -131,6 +166,9 @@ export class PreviewSummaryQueryDto {
   @IsArray()
   @IsString({ each: true })
   targetIds?: string[];
+
+  @ProjectIdsProperty()
+  projectIds?: string[];
 }
 
 export class PreviewVulQueryDto {
@@ -149,6 +187,9 @@ export class PreviewVulQueryDto {
   @IsArray()
   @IsString({ each: true })
   targetIds?: string[];
+
+  @ProjectIdsProperty()
+  projectIds?: string[];
 
   @ApiProperty({ required: false, description: 'Vulnerability IDs to include', type: [String] })
   @IsOptional()

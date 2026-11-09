@@ -140,6 +140,8 @@ export interface ReportData {
   logoBase64?: string;
   dateRange?: string;
   dateRangeLabel?: string;
+  /** Projects the report is limited to; absent for the whole workspace. */
+  projectNames?: string[];
   weekly: WeeklyStats;
   monthly: MonthlyStats;
   vulnerabilityTrends: VulnerabilityTrends;
