@@ -39,7 +39,7 @@ services:
       - ./core-api/.env
     ports:
       - '127.0.0.1:6276:6276'
-      - '127.0.0.1:16276:16276'
+      - '192.168.11.154:16276:16276'
     environment:
       - TRUSTED_PROXIES=172.19.0.1
       - BETTER_AUTH_URL=https://asm.vtccloud.vn
