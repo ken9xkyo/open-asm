@@ -7633,6 +7633,8 @@ export type GenerateSummaryReportBodyDto = {
   endDate?: string;
   /** Target IDs to filter summary data */
   targetIds?: string[];
+  /** Limit the report to the assets of these projects (active projects of the workspace) */
+  projectIds?: string[];
 };
 
 /**
@@ -7656,6 +7658,8 @@ export type GenerateVulReportBodyDto = {
   endDate?: string;
   /** Target IDs to filter vulnerabilities */
   targetIds?: string[];
+  /** Limit the report to the assets of these projects (active projects of the workspace) */
+  projectIds?: string[];
   /** Vulnerability IDs to include in report */
   vulnIds?: string[];
   /** Minimum severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO) */
@@ -8829,6 +8833,10 @@ export type ReportsControllerPreviewSummaryReportParams = {
    * Target IDs to filter
    */
   targetIds?: string[];
+  /**
+   * Limit the report to the assets of these projects (active projects of the workspace)
+   */
+  projectIds?: string[];
 };
 
 export type ReportsControllerPreviewVulReportParams = {
@@ -8844,6 +8852,10 @@ export type ReportsControllerPreviewVulReportParams = {
    * Target IDs to filter
    */
   targetIds?: string[];
+  /**
+   * Limit the report to the assets of these projects (active projects of the workspace)
+   */
+  projectIds?: string[];
   /**
    * Vulnerability IDs to include
    */
