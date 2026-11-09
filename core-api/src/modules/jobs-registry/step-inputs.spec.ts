@@ -1,10 +1,12 @@
 import { DataKind, TargetType } from '@/common/enums/enum';
 import {
+  bindServicePorts,
   kindsToLoad,
   planStepInputs,
   webUrl,
   type ScopeAsset,
   type ScopeData,
+  usesServicesPlaceholder,
 } from './step-inputs';
 
 const apex: ScopeAsset = {
@@ -131,5 +133,27 @@ describe('kindsToLoad', () => {
       web: true,
       urls: true,
     });
+  });
+});
+
+describe('usesServicesPlaceholder', () => {
+  it('spots the placeholder in a top-level value only', () => {
+    expect(usesServicesPlaceholder({ ports: '{{services}}' })).toBe(true);
+    expect(usesServicesPlaceholder({ ports: '22,80' })).toBe(false);
+    expect(usesServicesPlaceholder({ nested: { ports: '{{services}}' } })).toBe(false);
+    expect(usesServicesPlaceholder(null)).toBe(false);
+  });
+});
+
+describe('bindServicePorts', () => {
+  it('replaces the placeholder with the ports, ascending and unique', () => {
+    const services = scope.services!.get('a-app')!;
+    expect(
+      bindServicePorts({ ports: '{{services}}', retries: 2 }, [...services, services[0]]),
+    ).toEqual({ ports: '22,80,8443', retries: 2 });
+  });
+
+  it('returns null for a host with no port', () => {
+    expect(bindServicePorts({ ports: '{{services}}' }, [])).toBeNull();
   });
 });

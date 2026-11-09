@@ -51,7 +51,11 @@ import { resolveStepInputs } from '../tools/tool-io';
 import { resolveToolTargetTypes } from '../tools/tool-target-types';
 import { builtInTools } from '../tools/tools-provider/built-in-tools';
 import { ToolsService } from '../tools/tools.service';
-import { planStepInputs } from './step-inputs';
+import {
+  bindServicePorts,
+  planStepInputs,
+  usesServicesPlaceholder,
+} from './step-inputs';
 import { StepScopeLoader } from './step-scope.loader';
 import {
   normalizeNeeds,
@@ -392,18 +396,31 @@ export class JobsRegistryService {
     // repository (and vice versa). A step with nothing to take creates no job
     // and is skipped. See step-inputs.ts.
     const inputs = resolveStepInputs(tool.name, categorySpec, input);
+    const jobConfig = isConnector ? (mergedConfig ?? config ?? null) : null;
+    // `{{services}}` in the config: each job gets its host's open ports, and
+    // a host with none is skipped. See SERVICES_PLACEHOLDER.
+    const bindsPorts = usesServicesPlaceholder(jobConfig);
     const loaded = await this.stepScope.load(inputs, {
       targetIds,
       assetIds,
       assetServiceIds,
       workspaceId,
       targetTypes: resolveToolTargetTypes(categorySpec),
+      ...(bindsPorts ? { withServices: true } : {}),
     });
     const defaultCommand = builtInTools.find(
       (t) => t.name === tool.name,
     )?.command;
 
     for (const planned of planStepInputs(inputs, loaded.scope)) {
+      const plannedConfig =
+        bindsPorts && jobConfig
+          ? bindServicePorts(
+              jobConfig,
+              loaded.scope.services?.get(planned.assetId) ?? [],
+            )
+          : jobConfig;
+      if (bindsPorts && !plannedConfig) continue;
       const assetService = planned.serviceId
         ? loaded.services.get(planned.serviceId)
         : undefined;
@@ -423,7 +440,7 @@ export class JobsRegistryService {
             : bindingCommand(defaultCommand ?? '', planned.commandValues),
           inputs: isConnector ? planned.connectorInputs : null,
           configProfileId: isConnector ? configProfileId : undefined,
-          config: isConnector ? mergedConfig ?? config ?? null : null,
+          config: plannedConfig,
           isSaveRawResult: isSaveRawResult ?? false,
           isPublishEvent,
         } as DeepPartial<Job>),

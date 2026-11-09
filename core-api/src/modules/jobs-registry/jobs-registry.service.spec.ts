@@ -2011,6 +2011,52 @@ describe('JobsRegistryService', () => {
       expect(mockJobRepo.save).not.toHaveBeenCalled();
     });
 
+    describe('{{services}} in the config', () => {
+      const ssh = { id: 's-22', assetId: 'a-app', value: 'app.example.com:22', port: 22 };
+
+      beforeEach(() => {
+        mockConnectorRegistryService.getConnector.mockReturnValue({ image: 'ghcr.io/nmap' });
+        mockToolConfigProfilesService.resolveConfigForJob.mockResolvedValue({
+          ports: '{{services}}',
+          noPing: true,
+        });
+        const loaded = loadedScope();
+        loaded.scope.services = new Map([['a-app', [web8443, ssh, web8443]]]);
+        load.mockResolvedValue(loaded);
+      });
+
+      it("gives each job its host's open ports and skips a host with none", async () => {
+        const jobs = await run({ tool: nmap, config: { ports: '{{services}}' } });
+
+        expect(load).toHaveBeenCalledWith(
+          [DataKind.HOST],
+          expect.objectContaining({ withServices: true }),
+        );
+        // The apex has no known port: no job.
+        expect(jobs.map((job) => [job.asset, job.config])).toEqual([
+          [app, { ports: '22,8443', noPing: true }],
+        ]);
+      });
+
+      it('creates no job when no host has a port (the step is skipped)', async () => {
+        const loaded = loadedScope();
+        loaded.scope.services = new Map();
+        load.mockResolvedValue(loaded);
+
+        expect(await run({ tool: nmap })).toEqual([]);
+        expect(mockJobRepo.save).not.toHaveBeenCalled();
+      });
+
+      it('loads no services for a config without the placeholder', async () => {
+        mockToolConfigProfilesService.resolveConfigForJob.mockResolvedValue({ ports: '80' });
+
+        const jobs = await run({ tool: nmap });
+
+        expect(load.mock.calls[0][1]).not.toHaveProperty('withServices');
+        expect(jobs.map((job) => job.config)).toEqual([{ ports: '80' }, { ports: '80' }]);
+      });
+    });
+
     describe('category selection', () => {
       it('defaults the category, its inputs and target types to the first one', async () => {
         const jobs = await run({ tool: nmap });

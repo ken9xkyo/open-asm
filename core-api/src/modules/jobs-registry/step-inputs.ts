@@ -102,6 +102,45 @@ export function planStepInputs(
   return planned;
 }
 
+/**
+ * A connector config value standing for the open ports of the job's host. A
+ * top-level config value equal to it is replaced, per job, by the ports the
+ * platform knows for that host (`22,80,443`), e.g. found by a port scanner
+ * earlier in the run; a host with no known port gets no job.
+ */
+export const SERVICES_PLACEHOLDER = '{{services}}';
+
+/** Whether a top-level value of `config` is {@link SERVICES_PLACEHOLDER}. */
+export function usesServicesPlaceholder(
+  config: Record<string, unknown> | null | undefined,
+): boolean {
+  return (
+    !!config &&
+    Object.values(config).some((value) => value === SERVICES_PLACEHOLDER)
+  );
+}
+
+/**
+ * `config` with every {@link SERVICES_PLACEHOLDER} replaced by the ports of
+ * these services, ascending and without repeats. Null when there are none.
+ */
+export function bindServicePorts(
+  config: Record<string, unknown>,
+  services: readonly ScopeService[],
+): Record<string, unknown> | null {
+  const ports = [...new Set(services.map((service) => service.port))].sort(
+    (a, b) => a - b,
+  );
+  if (ports.length === 0) return null;
+  const list = ports.join(',');
+  return Object.fromEntries(
+    Object.entries(config).map(([key, value]) => [
+      key,
+      value === SERVICES_PLACEHOLDER ? list : value,
+    ]),
+  );
+}
+
 /** `https://host` for the default port, `https://host:8443` otherwise. */
 export function webUrl(host: string, scheme: string, port: number): string {
   const defaultPort = scheme === 'https' ? 443 : 80;

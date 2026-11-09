@@ -192,6 +192,26 @@ The Fast scan (`POST /vulnerabilities/scan`) runs the nuclei step of
 `vulnerability_scan_basic.yaml` with its `input: [web, host]`: every web
 service httpx confirmed live, and the host itself when discovery found none.
 
+## Handing a host's open ports to a tool
+
+A connector that takes `host` can still scan only the ports found earlier. Set
+a top-level config value to `{{services}}` and each job gets the ports known
+for its host, comma-separated; a host with no known port gets no job.
+
+```yaml
+port_scan:
+  run: naabu
+vuln_scan:
+  run: nmap
+  category: vulnerabilities
+  needs: [port_scan]
+  config:
+    ports: "{{services}}"     # e.g. "22,80,443" per host
+```
+
+Put the placeholder in the workflow's inline config, not in a config profile:
+a profile is also used where nothing replaces it (agent tool runs).
+
 ## For contributors
 
 | File | What it does |
