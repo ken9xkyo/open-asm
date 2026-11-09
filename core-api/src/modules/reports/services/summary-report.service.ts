@@ -11,6 +11,17 @@ import { openVulnerabilityCondition } from '@/modules/vulnerabilities/open-vulne
 import { Severity, VulnerabilityAnalyzeStatus, JobStatus } from '@/common/enums/enum';
 import type { TargetType } from '@/modules/targets/entities/target.entity';
 import type { ReportData } from '../types/report-data.type';
+import {
+  applyVulnerabilityFilters,
+  type VulnerabilityFilterOptions,
+} from '@/modules/statistic/vulnerability-filter';
+
+type SummaryReportOptions = Pick<
+  VulnerabilityFilterOptions,
+  'startDate' | 'endDate' | 'targetIds' | 'projectIds'
+>;
+/** The targets/projects a report covers, without its date range. */
+type ReportScope = Pick<VulnerabilityFilterOptions, 'targetIds' | 'projectIds'>;
 
 type RiskLevel = Exclude<Severity, Severity.INFO>;
 type ScanStatus = VulnerabilityAnalyzeStatus | Exclude<JobStatus, JobStatus.CANCELLED>;
@@ -33,11 +44,7 @@ export class SummaryReportService {
 
   async getSummaryReportData(
     workspaceId: string,
-    options?: {
-      startDate?: Date;
-      endDate?: Date;
-      targetIds?: string[];
-    },
+    options?: SummaryReportOptions,
   ): Promise<ReportData> {
     const now = new Date();
     const week = this.getWeekNumber(now);
@@ -54,6 +61,12 @@ export class SummaryReportService {
     const lastWeekStart = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    // Target/project scope, for queries with a fixed time window of their own
+    const scope: ReportScope = {
+      targetIds: options?.targetIds,
+      projectIds: options?.projectIds,
+    };
 
     // Fetch all data in parallel
     const [
@@ -102,20 +115,20 @@ export class SummaryReportService {
       this.statisticService.getSeverityCounts(workspaceId, options),
       this.statisticService.getSeverityCounts(workspaceId, { ...options, startDate: lastWeekStart, endDate: weekStart }),
       this.statisticService.getSeverityCounts(workspaceId, { ...options, startDate: lastMonthStart, endDate: monthStart }),
-      this.getNewVulnerabilityCount(workspaceId, weekStart, now),
-      this.getNewVulnerabilityCount(workspaceId, monthStart, now),
-      this.getResolvedVulnerabilityCount(workspaceId, weekStart, now),
-      this.getResolvedVulnerabilityCount(workspaceId, monthStart, now),
-      this.statisticService.getVulnerabilityTrends(workspaceId),
-      this.getNewFindings(workspaceId, options),
-      this.getResolvedFindings(workspaceId, options),
-      this.getTargets(workspaceId, options),
-      this.getVulnerabilityByTarget(workspaceId, options),
-      this.getScanCount(workspaceId, monthStart, now),
-      this.getNewTargetsByType(workspaceId, 'DOMAIN', weekStart, now),
-      this.getNewTargetsByType(workspaceId, 'IP', weekStart, now),
-      this.getNewPorts(workspaceId, weekStart, now),
-      this.getNewTechnologies(workspaceId, weekStart, now),
+      this.getNewVulnerabilityCount(workspaceId, weekStart, now, scope),
+      this.getNewVulnerabilityCount(workspaceId, monthStart, now, scope),
+      this.getResolvedVulnerabilityCount(workspaceId, weekStart, now, scope),
+      this.getResolvedVulnerabilityCount(workspaceId, monthStart, now, scope),
+      this.statisticService.getVulnerabilityTrends(workspaceId, scope),
+      this.getNewFindings(workspaceId, options, scope),
+      this.getResolvedFindings(workspaceId, options, scope),
+      this.getTargets(workspaceId, options, scope),
+      this.getVulnerabilityByTarget(workspaceId, options, scope),
+      this.getScanCount(workspaceId, monthStart, now, scope),
+      this.getNewTargetsByType(workspaceId, 'DOMAIN', weekStart, now, scope),
+      this.getNewTargetsByType(workspaceId, 'IP', weekStart, now, scope),
+      this.getNewPorts(workspaceId, weekStart, now, scope),
+      this.getNewTechnologies(workspaceId, weekStart, now, scope),
     ]);
 
     // Calculate changes
@@ -250,8 +263,9 @@ export class SummaryReportService {
     workspaceId: string,
     startDate: Date,
     endDate: Date,
+    scope: ReportScope,
   ): Promise<number> {
-    return this.vulnRepo
+    const qb = this.vulnRepo
       .createQueryBuilder('v')
       .leftJoin('v.asset', 'asset')
       .leftJoin('asset.target', 'target')
@@ -259,16 +273,17 @@ export class SummaryReportService {
       .where('workspace.id = :workspaceId', { workspaceId })
       .andWhere(openVulnerabilityCondition('v'))
       .andWhere('v.createdAt >= :startDate', { startDate })
-      .andWhere('v.createdAt <= :endDate', { endDate })
-      .getCount();
+      .andWhere('v.createdAt <= :endDate', { endDate });
+    return applyVulnerabilityFilters(qb, scope).getCount();
   }
 
   private async getResolvedVulnerabilityCount(
     workspaceId: string,
     startDate: Date,
     endDate: Date,
+    scope: ReportScope,
   ): Promise<number> {
-    return this.vulnRepo
+    const qb = this.vulnRepo
       .createQueryBuilder('v')
       .leftJoin('v.asset', 'asset')
       .leftJoin('asset.target', 'target')
@@ -278,13 +293,14 @@ export class SummaryReportService {
       .andWhere('v.isArchived = :isArchived', { isArchived: false })
       .andWhere('dismissal.id IS NOT NULL')
       .andWhere('dismissal.createdAt >= :startDate', { startDate })
-      .andWhere('dismissal.createdAt <= :endDate', { endDate })
-      .getCount();
+      .andWhere('dismissal.createdAt <= :endDate', { endDate });
+    return applyVulnerabilityFilters(qb, scope).getCount();
   }
 
   private async getNewFindings(
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date; targetIds?: string[] },
+    options: SummaryReportOptions | undefined,
+    scope: ReportScope,
     limit = 10,
   ) {
     const qb = this.vulnRepo
@@ -304,11 +320,7 @@ export class SummaryReportService {
     if (options?.endDate) {
       qb.andWhere('v.createdAt <= :endDate', { endDate: options.endDate });
     }
-    if (options?.targetIds?.length) {
-      qb.andWhere('target.id IN (:...targetIds)', {
-        targetIds: options.targetIds,
-      });
-    }
+    applyVulnerabilityFilters(qb, scope);
 
     const vulns = await qb.getMany();
 
@@ -326,7 +338,8 @@ export class SummaryReportService {
 
   private async getResolvedFindings(
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date; targetIds?: string[] },
+    options: SummaryReportOptions | undefined,
+    scope: ReportScope,
     limit = 10,
   ) {
     const dismissedQb = this.vulnRepo
@@ -346,11 +359,7 @@ export class SummaryReportService {
     if (options?.endDate) {
       dismissedQb.andWhere('dismissal.createdAt <= :endDate', { endDate: options.endDate });
     }
-    if (options?.targetIds?.length) {
-      dismissedQb.andWhere('target.id IN (:...targetIds)', {
-        targetIds: options.targetIds,
-      });
-    }
+    applyVulnerabilityFilters(dismissedQb, scope);
 
     const dismissedVulns = await dismissedQb.getMany();
 
@@ -370,11 +379,7 @@ export class SummaryReportService {
     if (options?.endDate) {
       archivedQb.andWhere('v.updatedAt <= :endDate', { endDate: options.endDate });
     }
-    if (options?.targetIds?.length) {
-      archivedQb.andWhere('target.id IN (:...targetIds)', {
-        targetIds: options.targetIds,
-      });
-    }
+    applyVulnerabilityFilters(archivedQb, scope);
 
     const archivedVulns = await archivedQb.getMany();
 
@@ -405,7 +410,8 @@ export class SummaryReportService {
 
   private async getTargets(
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date; targetIds?: string[] },
+    options: SummaryReportOptions | undefined,
+    scope: ReportScope,
     limit = 10,
   ) {
     const qb = this.targetRepo
@@ -443,9 +449,7 @@ export class SummaryReportService {
     if (options?.endDate) {
       qb.andWhere('v.createdAt <= :endDate', { endDate: options.endDate });
     }
-    if (options?.targetIds?.length) {
-      qb.andWhere('t.id IN (:...targetIds)', { targetIds: options.targetIds });
-    }
+    applyVulnerabilityFilters(qb, scope, { vuln: 'v', target: 't' });
 
     const targets = await qb.getRawMany<{
       t_id: string;
@@ -471,7 +475,8 @@ export class SummaryReportService {
 
   private async getVulnerabilityByTarget(
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date; targetIds?: string[] },
+    options: SummaryReportOptions | undefined,
+    scope: ReportScope,
   ) {
     const qb = this.targetRepo
       .createQueryBuilder('t')
@@ -511,9 +516,7 @@ export class SummaryReportService {
     if (options?.endDate) {
       qb.andWhere('v.createdAt <= :endDate', { endDate: options.endDate });
     }
-    if (options?.targetIds?.length) {
-      qb.andWhere('t.id IN (:...targetIds)', { targetIds: options.targetIds });
-    }
+    applyVulnerabilityFilters(qb, scope, { vuln: 'v', target: 't' });
 
     const results = await qb.getRawMany<{
       targetValue: string;
@@ -540,6 +543,7 @@ export class SummaryReportService {
     workspaceId: string,
     startDate: Date,
     endDate: Date,
+    scope: ReportScope,
   ): Promise<number> {
     // Count distinct job history entries as scans
     const qb = this.vulnRepo
@@ -551,6 +555,7 @@ export class SummaryReportService {
       .where('workspace.id = :workspaceId', { workspaceId })
       .andWhere('v.createdAt >= :startDate', { startDate })
       .andWhere('v.createdAt <= :endDate', { endDate });
+    applyVulnerabilityFilters(qb, scope);
 
     const result = await qb.getRawOne<{ count: string }>();
     return result?.count ? parseInt(result.count, 10) : 0;
@@ -561,8 +566,9 @@ export class SummaryReportService {
     type: string,
     startDate: Date,
     endDate: Date,
+    scope: ReportScope,
   ) {
-    const results = await this.targetRepo
+    const qb = this.targetRepo
       .createQueryBuilder('t')
       .leftJoin('t.workspace', 'workspace')
       .leftJoin('t.assets', 'asset')
@@ -578,8 +584,11 @@ export class SummaryReportService {
       .addGroupBy('t.value')
       .addGroupBy('t.createdAt')
       .orderBy('t.createdAt', 'DESC')
-      .limit(10)
-      .getRawMany<{ identifier: string; discovered: Date; vulnCount: string }>();
+      .limit(10);
+    const results = await applyVulnerabilityFilters(qb, scope, {
+      vuln: 'v',
+      target: 't',
+    }).getRawMany<{ identifier: string; discovered: Date; vulnCount: string }>();
 
     return results.map((r) => ({
       identifier: r.identifier,
@@ -593,8 +602,9 @@ export class SummaryReportService {
     workspaceId: string,
     startDate: Date,
     endDate: Date,
+    scope: ReportScope,
   ) {
-    const results = await this.assetServiceRepo
+    const qb = this.assetServiceRepo
       .createQueryBuilder('as')
       .leftJoin('as.asset', 'asset')
       .leftJoin('asset.target', 'target')
@@ -614,8 +624,8 @@ export class SummaryReportService {
       .addGroupBy('as.createdAt')
       .addGroupBy('target.value')
       .orderBy('as.createdAt', 'DESC')
-      .limit(10)
-      .getRawMany<{
+      .limit(10);
+    const results = await applyVulnerabilityFilters(qb, scope).getRawMany<{
         port: number;
         service: string;
         discovered: Date;
@@ -636,8 +646,9 @@ export class SummaryReportService {
     workspaceId: string,
     startDate: Date,
     endDate: Date,
+    scope: ReportScope,
   ) {
-    const results = await this.assetTagRepo
+    const qb = this.assetTagRepo
       .createQueryBuilder('at')
       .leftJoin('at.assetService', 'as')
       .leftJoin('as.asset', 'asset')
@@ -654,8 +665,12 @@ export class SummaryReportService {
       .addGroupBy('at.createdAt')
       .addGroupBy('target.value')
       .orderBy('at.createdAt', 'DESC')
-      .limit(10)
-      .getRawMany<{ name: string; discovered: Date; targetValue: string }>();
+      .limit(10);
+    const results = await applyVulnerabilityFilters(qb, scope).getRawMany<{
+      name: string;
+      discovered: Date;
+      targetValue: string;
+    }>();
 
     return results.map((r) => ({
       name: r.name,

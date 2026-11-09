@@ -1,11 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { generateToken } from '@/utils/genToken';
 import { getManyResponse } from '@/utils/getManyResponse';
 import { StorageService } from '@/modules/storage/storage.service';
+import { Project } from '@/modules/projects/entities/project.entity';
+import type {
+  MinSeverity,
+  VulnerabilityFilterOptions,
+} from '@/modules/statistic/vulnerability-filter';
 import { GetManyReportsQueryDto } from './dto/reports.dto';
 import { Report } from './entities/report.entity';
 import type { ReportData } from './types/report-data.type';
@@ -22,6 +31,8 @@ export class ReportsService {
   constructor(
     @InjectRepository(Report)
     private readonly reportRepo: Repository<Report>,
+    @InjectRepository(Project)
+    private readonly projectRepo: Repository<Project>,
     private readonly storageService: StorageService,
     private readonly vulnerabilityReportService: VulnerabilityReportService,
     private readonly summaryReportService: SummaryReportService,
@@ -107,34 +118,9 @@ export class ReportsService {
     workspaceId: string,
     userId: string,
     type: 'SUMMARY' | 'VULNERABILITY' = 'SUMMARY',
-    options?: {
-      startDate?: Date;
-      endDate?: Date;
-      targetIds?: string[];
-      vulnIds?: string[];
-      minSeverity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
-    },
+    options?: VulnerabilityFilterOptions,
   ): Promise<{ filePath: string; fileName: string }> {
-    let data: ReportData | VulnerabilityReportData;
-
-    if (type === 'VULNERABILITY') {
-      data = await this.vulnerabilityReportService.getVulnerabilityReportData(
-        workspaceId,
-        options,
-      );
-    } else {
-      data = await this.summaryReportService.getSummaryReportData(
-        workspaceId,
-        options,
-      );
-    }
-
-    const enrichedData = {
-      ...data,
-      logoBase64: this.logoBase64 ?? data.logoBase64,
-    };
-
-    const pdfBuffer = await renderReportPdf(type, enrichedData);
+    const pdfBuffer = await this.renderReport(workspaceId, type, options);
 
     const fileName = `report-${type.toLowerCase()}-${generateToken(24)}-${Date.now()}.pdf`;
     const { path: uploadPath } = await this.storageService.uploadFile(
@@ -160,19 +146,14 @@ export class ReportsService {
       startDate?: string;
       endDate?: string;
       targetIds?: string[];
+      projectIds?: string[];
     },
   ): Promise<Buffer> {
-    const data = await this.summaryReportService.getSummaryReportData(
-      workspaceId,
-      {
-        startDate: options?.startDate ? new Date(options.startDate) : undefined,
-        endDate: options?.endDate ? new Date(options.endDate) : undefined,
-        targetIds: options?.targetIds,
-      },
-    );
-    return renderReportPdf('SUMMARY', {
-      ...data,
-      logoBase64: this.logoBase64 ?? data.logoBase64,
+    return this.renderReport(workspaceId, 'SUMMARY', {
+      startDate: options?.startDate ? new Date(options.startDate) : undefined,
+      endDate: options?.endDate ? new Date(options.endDate) : undefined,
+      targetIds: options?.targetIds,
+      projectIds: options?.projectIds,
     });
   }
 
@@ -182,24 +163,73 @@ export class ReportsService {
       startDate?: string;
       endDate?: string;
       targetIds?: string[];
+      projectIds?: string[];
       vulnIds?: string[];
-      minSeverity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+      minSeverity?: MinSeverity;
     },
   ): Promise<Buffer> {
-    const data = await this.vulnerabilityReportService.getVulnerabilityReportData(
+    return this.renderReport(workspaceId, 'VULNERABILITY', {
+      startDate: options?.startDate ? new Date(options.startDate) : undefined,
+      endDate: options?.endDate ? new Date(options.endDate) : undefined,
+      targetIds: options?.targetIds,
+      projectIds: options?.projectIds,
+      vulnIds: options?.vulnIds,
+      minSeverity: options?.minSeverity,
+    });
+  }
+
+  private async renderReport(
+    workspaceId: string,
+    type: 'SUMMARY' | 'VULNERABILITY',
+    options?: VulnerabilityFilterOptions,
+  ): Promise<Buffer> {
+    const projectNames = await this.resolveProjectNames(
       workspaceId,
-      {
-        startDate: options?.startDate ? new Date(options.startDate) : undefined,
-        endDate: options?.endDate ? new Date(options.endDate) : undefined,
-        targetIds: options?.targetIds,
-        vulnIds: options?.vulnIds,
-        minSeverity: options?.minSeverity,
-      },
+      options?.projectIds,
     );
-    return renderReportPdf('VULNERABILITY', {
+
+    const data: ReportData | VulnerabilityReportData =
+      type === 'VULNERABILITY'
+        ? await this.vulnerabilityReportService.getVulnerabilityReportData(
+            workspaceId,
+            options,
+          )
+        : await this.summaryReportService.getSummaryReportData(
+            workspaceId,
+            options,
+          );
+
+    return renderReportPdf(type, {
       ...data,
       logoBase64: this.logoBase64 ?? data.logoBase64,
+      projectNames,
     });
+  }
+
+  /**
+   * Names of the projects a report is scoped to, for its cover. Each id must
+   * be an active project of the workspace: an unknown id would otherwise
+   * yield a silently empty report, and an archived project is read-only.
+   */
+  private async resolveProjectNames(
+    workspaceId: string,
+    projectIds?: string[],
+  ): Promise<string[] | undefined> {
+    if (!projectIds?.length) return undefined;
+    const ids = [...new Set(projectIds)];
+    const projects = await this.projectRepo.find({
+      where: { id: In(ids), workspace: { id: workspaceId } },
+      order: { name: 'ASC' },
+    });
+    if (projects.length !== ids.length) {
+      throw new NotFoundException('One or more projects were not found');
+    }
+    if (projects.some((project) => project.archivedAt)) {
+      throw new BadRequestException(
+        'Archived projects cannot be reported on; reopen them first',
+      );
+    }
+    return projects.map((project) => project.name);
   }
 
   async deleteReport(id: string, workspaceId: string): Promise<void> {

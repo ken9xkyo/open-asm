@@ -2,7 +2,9 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
 import { StorageService } from '@/modules/storage/storage.service';
+import { Project } from '@/modules/projects/entities/project.entity';
 import { Report } from './entities/report.entity';
+import { renderReportPdf } from './renderer/pdf-renderer';
 import { ReportsService } from './reports.service';
 import { VulnerabilityReportService } from './services/vulnerability-report.service';
 import { SummaryReportService } from './services/summary-report.service';
@@ -15,6 +17,8 @@ describe('ReportsService', () => {
   let service: ReportsService;
   let reportRepository: Repository<Report>;
   let storageService: StorageService;
+  let projectFind: jest.Mock;
+  let vulnReportData: jest.Mock;
 
   const mockReport = {
     id: '123e4567-e89b-12d3-a456-42614174000',
@@ -27,6 +31,8 @@ describe('ReportsService', () => {
   };
 
   beforeEach(async () => {
+    projectFind = jest.fn();
+    vulnReportData = jest.fn().mockResolvedValue({ reportTitle: 'Vulns' });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReportsService,
@@ -49,6 +55,10 @@ describe('ReportsService', () => {
           },
         },
         {
+          provide: getRepositoryToken(Project),
+          useValue: { find: projectFind },
+        },
+        {
           provide: StorageService,
           useValue: {
             uploadFile: jest.fn(),
@@ -58,7 +68,7 @@ describe('ReportsService', () => {
         {
           provide: VulnerabilityReportService,
           useValue: {
-            getVulnerabilityReportData: jest.fn(),
+            getVulnerabilityReportData: vulnReportData,
           },
         },
         {
@@ -136,6 +146,63 @@ describe('ReportsService', () => {
       ).resolves.not.toThrow();
 
       expect(reportRepository.remove).toHaveBeenCalledWith(mockReport);
+    });
+  });
+
+  describe('project scope', () => {
+    const projectIds = ['p1', 'p2', 'p1'];
+
+    it('passes the projects to the report data and names them on the cover', async () => {
+      projectFind.mockResolvedValue([
+        { id: 'p1', name: 'Alpha', archivedAt: null },
+        { id: 'p2', name: 'Beta', archivedAt: null },
+      ]);
+
+      await service.previewVulnerabilityReport('workspace-1', { projectIds });
+
+      expect(projectFind).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ workspace: { id: 'workspace-1' } }),
+        }),
+      );
+      expect(vulnReportData).toHaveBeenCalledWith(
+        'workspace-1',
+        expect.objectContaining({ projectIds }),
+      );
+      expect(renderReportPdf).toHaveBeenCalledWith(
+        'VULNERABILITY',
+        expect.objectContaining({ projectNames: ['Alpha', 'Beta'] }),
+      );
+    });
+
+    it('rejects a project outside the workspace', async () => {
+      projectFind.mockResolvedValue([{ id: 'p1', name: 'Alpha', archivedAt: null }]);
+
+      await expect(
+        service.previewVulnerabilityReport('workspace-1', { projectIds }),
+      ).rejects.toThrow('One or more projects were not found');
+      expect(vulnReportData).not.toHaveBeenCalled();
+    });
+
+    it('rejects an archived project', async () => {
+      projectFind.mockResolvedValue([
+        { id: 'p1', name: 'Alpha', archivedAt: null },
+        { id: 'p2', name: 'Beta', archivedAt: new Date() },
+      ]);
+
+      await expect(
+        service.previewVulnerabilityReport('workspace-1', { projectIds }),
+      ).rejects.toThrow('Archived projects cannot be reported on');
+    });
+
+    it('skips the project lookup for a workspace-wide report', async () => {
+      await service.previewVulnerabilityReport('workspace-1', {});
+
+      expect(projectFind).not.toHaveBeenCalled();
+      expect(renderReportPdf).toHaveBeenCalledWith(
+        'VULNERABILITY',
+        expect.objectContaining({ projectNames: undefined }),
+      );
     });
   });
 });

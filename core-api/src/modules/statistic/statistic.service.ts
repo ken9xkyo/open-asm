@@ -30,6 +30,9 @@ import { Vulnerability } from '../vulnerabilities/entities/vulnerability.entity'
 import { openVulnerabilityCondition } from '../vulnerabilities/open-vulnerability';
 import {
   applyVulnerabilityFilters,
+  projectAssetCondition,
+  projectFilterParams,
+  projectTargetCondition,
   type VulnerabilityFilterOptions,
 } from './vulnerability-filter';
 import { Workspace } from '../workspaces/entities/workspace.entity';
@@ -65,6 +68,8 @@ interface StatisticFilter {
   targetId?: string;
   startDate?: Date;
   endDate?: Date;
+  /** Limits the counts to the assets of these projects (reports only). */
+  projectIds?: string[];
 }
 
 interface StatisticSnapshot {
@@ -476,7 +481,7 @@ export class StatisticService {
    * @returns An array of objects containing the workspaceId and asset count.
    */
   async getAssetCounts(filter: StatisticFilter) {
-    const { workspaceIds, targetId, startDate, endDate } = filter;
+    const { workspaceIds, targetId, startDate, endDate, projectIds } = filter;
     const query = this.dataSource
       .getRepository(Asset)
       .createQueryBuilder('asset')
@@ -493,6 +498,9 @@ export class StatisticService {
     }
     if (targetId) {
       query.andWhere('target.id = :targetId', { targetId });
+    }
+    if (projectIds?.length) {
+      query.andWhere(projectAssetCondition('asset'), projectFilterParams(projectIds));
     }
     if (startDate) {
       query.andWhere('asset.createdAt >= :startDate', { startDate });
@@ -512,7 +520,7 @@ export class StatisticService {
    * @returns An array of objects containing the workspaceId and target count.
    */
   async getTargetCounts(filter: StatisticFilter) {
-    const { workspaceIds, targetId, startDate, endDate } = filter;
+    const { workspaceIds, targetId, startDate, endDate, projectIds } = filter;
     const query = this.dataSource
       .getRepository(Target)
       .createQueryBuilder('target')
@@ -527,6 +535,9 @@ export class StatisticService {
     }
     if (targetId) {
       query.andWhere('target.id = :targetId', { targetId });
+    }
+    if (projectIds?.length) {
+      query.andWhere(projectTargetCondition('target'), projectFilterParams(projectIds));
     }
     if (startDate) {
       query.andWhere('target.createdAt >= :startDate', { startDate });
@@ -546,7 +557,7 @@ export class StatisticService {
    * @returns An array of objects containing the workspaceId, severity, and vulnerability count.
    */
   async getVulnerabilityCounts(filter: StatisticFilter) {
-    const { workspaceIds, targetId, startDate, endDate } = filter;
+    const { workspaceIds, targetId, startDate, endDate, projectIds } = filter;
     const query = this.dataSource
       .getRepository(Vulnerability)
       .createQueryBuilder('vuln')
@@ -564,6 +575,9 @@ export class StatisticService {
     }
     if (targetId) {
       query.andWhere('target.id = :targetId', { targetId });
+    }
+    if (projectIds?.length) {
+      query.andWhere(projectAssetCondition('asset'), projectFilterParams(projectIds));
     }
     if (startDate) {
       query.andWhere('vuln.createdAt >= :startDate', { startDate });
@@ -641,7 +655,7 @@ export class StatisticService {
    * the host assets tab and the run-completed notification.
    */
   async getServiceFootprintCounts(filter: StatisticFilter) {
-    const { workspaceIds, targetId, startDate, endDate } = filter;
+    const { workspaceIds, targetId, startDate, endDate, projectIds } = filter;
     const query = this.dataSource
       .createQueryBuilder()
       .select('target.workspaceId', 'workspaceId')
@@ -660,6 +674,9 @@ export class StatisticService {
     }
     if (targetId) {
       query.andWhere('target.id = :targetId', { targetId });
+    }
+    if (projectIds?.length) {
+      query.andWhere(projectAssetCondition('asset'), projectFilterParams(projectIds));
     }
     if (startDate) {
       query.andWhere('"assetService"."createdAt" >= :startDate', {
@@ -1283,9 +1300,14 @@ export class StatisticService {
       | 'ports'
       | 'techs',
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date },
+    options?: { startDate?: Date; endDate?: Date; projectIds?: string[] },
   ): Promise<number> {
-    const filter = { workspaceIds: [workspaceId], ...options };
+    const filter: StatisticFilter = {
+      workspaceIds: [workspaceId],
+      startDate: options?.startDate,
+      endDate: options?.endDate,
+      projectIds: options?.projectIds,
+    };
 
     if (countType === 'vulnerabilities') {
       // One row per severity; Info findings are not open vulnerabilities.

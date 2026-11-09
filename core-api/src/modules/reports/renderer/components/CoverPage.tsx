@@ -151,6 +151,7 @@ interface CoverPageProps {
   systemNameChar?: string;
   systemName?: string;
   workspaceName?: string;
+  projectNames?: string[];
   classification?: string;
   formattedDate?: string;
 }
@@ -163,6 +164,7 @@ export const CoverPage: React.FC<CoverPageProps> = ({
   systemNameChar,
   systemName,
   workspaceName,
+  projectNames,
   classification,
   formattedDate,
 }) => {
@@ -216,6 +218,19 @@ export const CoverPage: React.FC<CoverPageProps> = ({
             </View>
           </View>
         )}
+
+        {projectNames?.length ? (
+          <View style={styles.metaRow}>
+            <View>
+              <Text style={styles.metaLabel}>
+                {projectNames.length > 1 ? 'Projects' : 'Project'}
+              </Text>
+              <Text style={[styles.metaValue, { color: slate[800] }]}>
+                {projectNames.join(', ')}
+              </Text>
+            </View>
+          </View>
+        ) : null}
       </View>
 
       {/* Bottom bar */}
