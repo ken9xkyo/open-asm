@@ -7,6 +7,7 @@ import { type DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
 
 import Page from '@/components/common/page';
+import { EnumMultiSelect } from '@/components/schema-form/fields/EnumMultiSelect';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTable } from '@/components/ui/data-table';
@@ -41,6 +42,7 @@ import {
   useReportsControllerDeleteReport,
   useReportsControllerGenerateSummaryReport,
   useReportsControllerGenerateVulReport,
+  useProjectsControllerGetMany,
   useReportsControllerGetMany,
 } from '@/services/apis/gen/queries';
 import CreateWorkspace from '../workspaces/create-workspace';
@@ -62,6 +64,7 @@ export default function Reports() {
   const [reportType, setReportType] = useState<ReportType>('SUMMARY');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [minSeverity, setMinSeverity] = useState<string>('');
+  const [projectIds, setProjectIds] = useState<string[]>([]);
   const [activeTab, setTab] = useQueryTab({
     tabParam: 'tab',
     defaultValue: 'all',
@@ -105,6 +108,17 @@ export default function Reports() {
       },
     },
   );
+
+  // Archived projects are read-only and refused by the API, so only active
+  // ones are offered.
+  const { data: projects } = useProjectsControllerGetMany(
+    { page: 1, limit: 100, sortBy: 'name', sortOrder: 'ASC', status: 'active' },
+    { query: { enabled: generateOpen } },
+  );
+  const projectOptions = (projects?.data ?? []).map((project) => ({
+    value: project.id,
+    label: project.name,
+  }));
 
   const summaryMutation = useReportsControllerGenerateSummaryReport({
     mutation: {
@@ -150,6 +164,7 @@ export default function Reports() {
     setReportType('SUMMARY');
     setDateRange(undefined);
     setMinSeverity('');
+    setProjectIds([]);
   };
 
   const handleGenerate = () => {
@@ -158,6 +173,7 @@ export default function Reports() {
         data: {
           startDate: dateRange?.from?.toISOString(),
           endDate: dateRange?.to?.toISOString(),
+          projectIds: projectIds.length ? projectIds : undefined,
         },
       });
     } else {
@@ -165,6 +181,7 @@ export default function Reports() {
         data: {
           startDate: dateRange?.from?.toISOString(),
           endDate: dateRange?.to?.toISOString(),
+          projectIds: projectIds.length ? projectIds : undefined,
           minSeverity: minSeverity
             ? (minSeverity as 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO')
             : undefined,
@@ -291,6 +308,19 @@ export default function Reports() {
                   </Label>
                 </div>
               </RadioGroup>
+            </Field>
+
+            {/* Projects - for both types; empty means the whole workspace */}
+            <Field>
+              <Label className="text-sm font-medium mb-2 block">
+                Projects (optional)
+              </Label>
+              <EnumMultiSelect
+                options={projectOptions}
+                selected={projectIds}
+                onChange={(value) => setProjectIds(value as string[])}
+                placeholder="All projects (whole workspace)"
+              />
             </Field>
 
             {/* Date Range - for both types */}
