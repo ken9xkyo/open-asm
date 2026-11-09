@@ -26,6 +26,8 @@ export interface StepScopeFilter {
   workspaceId?: string;
   /** Target types the tool's category may scan. */
   targetTypes: TargetType[];
+  /** Load the services of the assets even when the step does not take them. */
+  withServices?: boolean;
 }
 
 /** The scope of a step, plus the entities the new jobs point at. */
@@ -50,6 +52,7 @@ export class StepScopeLoader {
     const assets = await this.loadAssets(filter);
     const assetIds = assets.map((asset) => asset.id);
     const need = kindsToLoad(inputs);
+    if (filter.withServices) need.services = true;
     const services = new Map<string, AssetService>();
     const scope: ScopeData = {
       assets: assets.map((asset) => ({
