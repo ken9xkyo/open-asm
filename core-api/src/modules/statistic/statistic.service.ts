@@ -36,6 +36,10 @@ import {
 
 import { Vulnerability } from '../vulnerabilities/entities/vulnerability.entity';
 import { openVulnerabilityCondition } from '../vulnerabilities/open-vulnerability';
+import {
+  applyVulnerabilityFilters,
+  type VulnerabilityFilterOptions,
+} from './vulnerability-filter';
 import { Workspace } from '../workspaces/entities/workspace.entity';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { IssuesTimelineResponseDto } from './dto/issues-timeline.dto';
@@ -1078,7 +1082,7 @@ export class StatisticService {
     workspaceId: string,
     startDate: Date,
     endDate: Date,
-    options?: { targetIds?: string[] },
+    options?: VulnerabilityFilterOptions,
   ) {
     const qb = this.dataSource
       .getRepository(Vulnerability)
@@ -1094,11 +1098,12 @@ export class StatisticService {
       .groupBy("TO_CHAR(v.createdAt, 'YYYY-MM-DD')")
       .orderBy('date', 'ASC');
 
-    if (options?.targetIds?.length) {
-      qb.andWhere('target.id IN (:...targetIds)', {
-        targetIds: options.targetIds,
-      });
-    }
+    // The window is fixed by the caller; only the other filters apply.
+    applyVulnerabilityFilters(qb, {
+      ...options,
+      startDate: undefined,
+      endDate: undefined,
+    });
 
     const results = await qb.getRawMany<{ date: string; count: string }>();
 
@@ -1127,7 +1132,7 @@ export class StatisticService {
    */
   async getVulnerabilityTrends(
     workspaceId: string,
-    options?: { targetIds?: string[] },
+    options?: VulnerabilityFilterOptions,
   ) {
     const now = new Date();
     const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -1174,7 +1179,7 @@ export class StatisticService {
    */
   async getSeverityCounts(
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date; targetIds?: string[] },
+    options?: VulnerabilityFilterOptions,
   ): Promise<Record<Severity, number>> {
     const qb = this.dataSource
       .getRepository(Vulnerability)
@@ -1186,19 +1191,7 @@ export class StatisticService {
       .where('target.workspaceId = :workspaceId', { workspaceId })
       .andWhere(openVulnerabilityCondition('v'));
 
-    if (options?.startDate) {
-      qb.andWhere('v.createdAt >= :startDate', {
-        startDate: options.startDate,
-      });
-    }
-    if (options?.endDate) {
-      qb.andWhere('v.createdAt <= :endDate', { endDate: options.endDate });
-    }
-    if (options?.targetIds?.length) {
-      qb.andWhere('target.id IN (:...targetIds)', {
-        targetIds: options.targetIds,
-      });
-    }
+    applyVulnerabilityFilters(qb, options);
 
     const results = await qb
       .groupBy('v.severity')
@@ -1226,7 +1219,7 @@ export class StatisticService {
    */
   async getTopAssetsWithVulnerabilities(
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date; targetIds?: string[] },
+    options?: VulnerabilityFilterOptions,
     limit = 10,
   ) {
     const qb = this.dataSource
@@ -1253,19 +1246,7 @@ export class StatisticService {
       .orderBy('"totalCount"', 'DESC')
       .limit(limit);
 
-    if (options?.startDate) {
-      qb.andWhere('v.createdAt >= :startDate', {
-        startDate: options.startDate,
-      });
-    }
-    if (options?.endDate) {
-      qb.andWhere('v.createdAt <= :endDate', { endDate: options.endDate });
-    }
-    if (options?.targetIds?.length) {
-      qb.andWhere('target.id IN (:...targetIds)', {
-        targetIds: options.targetIds,
-      });
-    }
+    applyVulnerabilityFilters(qb, options);
 
     const results = await qb.getRawMany<{
       assetValue: string;
@@ -1295,7 +1276,7 @@ export class StatisticService {
    */
   async getTargetVulnerabilityStats(
     workspaceId: string,
-    options?: { startDate?: Date; endDate?: Date; targetIds?: string[] },
+    options?: VulnerabilityFilterOptions,
   ) {
     const qb = this.dataSource
       .getRepository(Target)
@@ -1324,17 +1305,7 @@ export class StatisticService {
       .having('COUNT(v.id) > 0')
       .orderBy('total', 'DESC');
 
-    if (options?.startDate) {
-      qb.andWhere('v.createdAt >= :startDate', {
-        startDate: options.startDate,
-      });
-    }
-    if (options?.endDate) {
-      qb.andWhere('v.createdAt <= :endDate', { endDate: options.endDate });
-    }
-    if (options?.targetIds?.length) {
-      qb.andWhere('t.id IN (:...targetIds)', { targetIds: options.targetIds });
-    }
+    applyVulnerabilityFilters(qb, options, { vuln: 'v', target: 't' });
 
     const results = await qb.getRawMany<{
       targetValue: string;

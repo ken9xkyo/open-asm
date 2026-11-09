@@ -10,6 +10,7 @@ import { SectionHeader } from '../components/SectionHeader';
 import { MetricCard } from '../components/MetricCard';
 import { SeverityDistribution } from '../components/SeverityDistribution';
 import { VulnItem } from '../components/VulnItem';
+import { SeverityBadge } from '../components/Badge';
 import { BarChart } from '../components/BarChart';
 
 // Ensure fonts are registered
@@ -453,6 +454,58 @@ const TargetAnalysis: React.FC<{ data: VulnerabilityReportData }> = ({
   );
 };
 
+/**
+ * Rows per "Other Findings" page. The table is split into pages up front:
+ * letting react-pdf paginate one long table took minutes for a few thousand
+ * rows. Cells are clamped to one line so a page always holds this many.
+ */
+const OTHER_ROWS_PER_PAGE = 22;
+
+const oneLine = { maxLines: 1, textOverflow: 'ellipsis' } as const;
+
+const OtherFindingsTable: React.FC<{
+  rows: VulnerabilityReportData['otherVulnerabilities'];
+}> = ({ rows }) => (
+  <View style={styles.table}>
+    <View style={styles.tableHeader}>
+      <Text style={[styles.th, { width: '12%' }]}>Severity</Text>
+      <Text style={[styles.th, { width: '40%' }]}>Name</Text>
+      <Text style={[styles.th, { width: '24%' }]}>Asset</Text>
+      <Text style={[styles.th, { width: '9%', textAlign: 'center' }]}>
+        CVSS
+      </Text>
+      <Text style={[styles.th, { width: '15%' }]}>CVE</Text>
+    </View>
+    {rows.map((v) => (
+      <View key={v.id} style={styles.tableRow}>
+        <View style={{ width: '12%', paddingVertical: 4 }}>
+          <SeverityBadge severity={v.severity} />
+        </View>
+        <Text style={[styles.td, { width: '40%' }, oneLine]}>
+          {v.name}
+        </Text>
+        <Text style={[styles.td, { width: '24%' }, oneLine]}>
+          {v.asset}
+        </Text>
+        <Text style={[styles.td, { width: '9%', textAlign: 'center' }]}>
+          {v.cvssScore ? v.cvssScore.toFixed(1) : '-'}
+        </Text>
+        <Text style={[styles.td, { width: '15%' }, oneLine]}>
+          {v.cveId[0] ?? '-'}
+        </Text>
+      </View>
+    ))}
+  </View>
+);
+
+const chunk = <T,>(items: T[], size: number): T[][] => {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
+
 // ============ Main Document ======================================
 
 interface VulnReportDocumentProps {
@@ -528,8 +581,8 @@ export const VulnReportDocument: React.FC<VulnReportDocumentProps> = ({
       <TargetAnalysis data={data} />
     </Page>
 
-    {/* Each vulnerability gets its own fresh page */}
-    {data.allVulnerabilities.map((vuln, i) => (
+    {/* Each detailed vulnerability gets its own fresh page */}
+    {data.detailedVulnerabilities.map((vuln, i) => (
       <Page key={vuln.id} size="A4" style={styles.contentPage}>
         <ReportHeader
           logoBase64={data.logoBase64}
@@ -539,7 +592,7 @@ export const VulnReportDocument: React.FC<VulnReportDocumentProps> = ({
           systemName={data.systemName}
           classification={data.classification}
         />
-        {i === 0 && <SectionHeader number="05" title="All Vulnerabilities" />}
+        {i === 0 && <SectionHeader number="05" title="Vulnerability Details" />}
         <VulnItem
           severity={vuln.severity}
           name={vuln.name}
@@ -567,7 +620,29 @@ export const VulnReportDocument: React.FC<VulnReportDocumentProps> = ({
       </Page>
     ))}
 
-    {data.allVulnerabilities.length === 0 && (
+    {chunk(data.otherVulnerabilities, OTHER_ROWS_PER_PAGE).map((rows, i) => (
+      <Page key={`other-${i}`} size="A4" style={styles.contentPage} wrap={false}>
+        <ReportHeader
+          logoBase64={data.logoBase64}
+          reportTitle={data.reportTitle}
+        />
+        <ReportFooter
+          systemName={data.systemName}
+          classification={data.classification}
+        />
+        {i === 0 && (
+          <>
+            <SectionHeader number="06" title="Other Findings" />
+            <Text style={[styles.td, { paddingHorizontal: 0, color: slate[500] }]}>
+              {`${data.otherVulnerabilities.length} more open findings, beyond the ${data.detailedVulnerabilities.length} detailed above.`}
+            </Text>
+          </>
+        )}
+        <OtherFindingsTable rows={rows} />
+      </Page>
+    ))}
+
+    {data.detailedVulnerabilities.length === 0 && (
       <Page size="A4" style={styles.contentPage}>
         <ReportHeader
           logoBase64={data.logoBase64}
@@ -577,7 +652,7 @@ export const VulnReportDocument: React.FC<VulnReportDocumentProps> = ({
           systemName={data.systemName}
           classification={data.classification}
         />
-        <SectionHeader number="05" title="All Vulnerabilities" />
+        <SectionHeader number="05" title="Vulnerability Details" />
         <Text style={styles.noData}>No vulnerabilities found</Text>
       </Page>
     )}
