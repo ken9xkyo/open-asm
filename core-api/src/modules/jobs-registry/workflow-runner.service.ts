@@ -28,6 +28,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { JobHistory } from './entities/job-history.entity';
 import { Job } from './entities/job.entity';
 import { JobsRegistryService } from './jobs-registry.service';
+import { KeyedCoalescer } from './keyed-coalescer';
 
 export interface StartRunInput {
   workflow: Workflow;
@@ -63,6 +64,11 @@ interface RunGraph {
   droppedSteps: string[];
 }
 
+interface AdvanceResult {
+  dispatched: number;
+  completed: boolean;
+}
+
 /**
  * Drives a workflow run: dispatches steps whose `needs` are satisfied and keeps
  * the run's step state (`job_histories.steps`) in sync.
@@ -75,6 +81,7 @@ interface RunGraph {
 @Injectable()
 export class WorkflowRunnerService {
   private readonly logger = new Logger(WorkflowRunnerService.name);
+  private readonly advances = new KeyedCoalescer<AdvanceResult>();
 
   constructor(
     private readonly dataSource: DataSource,
@@ -207,10 +214,29 @@ export class WorkflowRunnerService {
     await this.advance(jobHistoryId);
   }
 
-  private async advance(
+  /**
+   * Serializes and coalesces advances of one run in this process.
+   *
+   * `advanceOnce` holds the run's row lock while it dispatches steps, and
+   * dispatching takes further pool connections. Without this, every job of a
+   * wide step finishing at once parks its own pool connection on that lock;
+   * once the pool is full the lock holder can never get the connection it
+   * needs and the whole API stalls. Coalescing is safe because an advance
+   * recomputes the run from the database.
+   */
+  private advance(
     jobHistoryId: string,
     prebuilt?: RunGraph,
-  ): Promise<{ dispatched: number; completed: boolean }> {
+  ): Promise<AdvanceResult> {
+    return this.advances.run(jobHistoryId, () =>
+      this.advanceOnce(jobHistoryId, prebuilt),
+    );
+  }
+
+  private async advanceOnce(
+    jobHistoryId: string,
+    prebuilt?: RunGraph,
+  ): Promise<AdvanceResult> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
