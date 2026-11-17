@@ -759,6 +759,32 @@ describe('WorkflowRunnerService', () => {
 
       expect(createNewJob).not.toHaveBeenCalled();
     });
+
+    it('coalesces jobs of one run finishing at once into a single advance', async () => {
+      await setup(
+        createFakeDb({
+          workflow: workflow([{ name: 'Port Scan', run: 'naabu' }]),
+          steps: { 'Port Scan': { status: 'dispatched', jobs: 30 } },
+        }),
+      );
+      getToolByNames.mockResolvedValue([
+        tool('naabu', ToolCategory.PORTS_SCANNER),
+      ]);
+
+      // A wide step: each finished job would otherwise park its own pool
+      // connection on the run's row lock and exhaust the pool.
+      await Promise.all(
+        Array.from({ length: 30 }, (_, index) =>
+          service.onJobTerminal({
+            id: `job-${index}`,
+            jobHistory: { id: 'history-1' },
+          } as Job),
+        ),
+      );
+
+      // None had started yet, so all thirty share one transaction.
+      expect(db.dataSource.createQueryRunner).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('job completion rollup', () => {
